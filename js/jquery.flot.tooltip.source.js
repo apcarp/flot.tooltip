@@ -27,6 +27,7 @@
             snap: true,
             lines: false,
             clickTips: false,
+            verticalLines: "continuous",
             // callbacks
             onHover: function(flotItem, $tooltipEl) {
             },
@@ -191,7 +192,6 @@
 
                 $.each(plot.getData(), function(i, series) {
 
-                    // Our binary search assumes our data is sorted via the x-axis.
                     var xBeforeIndexes = [0], xAfterIndexes = [-1];
                     var minIndex = 1; // Need to be able to look back one index
                     var maxIndex = series.data.length - 1;
@@ -247,12 +247,21 @@
 
                             var pointSize = series.datapoints.pointsize;
 
-                            var pointOnLine = [
-                                // If vertical line, use either of the points x coordinates
-                                (pointNext.x !== pointPrev.x) ? pos.x : pointNext.x,
+                            var pointOnLine = new Array(2);
+                            // If vertical line, use either of the points x coordinates
+                            pointOnLine[0] = (pointNext.x !== pointPrev.x) ? pos.x : pointNext.x;
+
+                            // Treat veritcal lines as right-inclusive jump discontinuities
+                            if (that.tooltipOptions.verticalLines === "right") {
                                 // Calculate the point on the line vertically closest to our cursor.  If vertical line, just use the current y position
-                                (pointNext.x !== pointPrev.x) ? pointPrev.y + ((pointNext.y - pointPrev.y) * ((pos.x - pointPrev.x) / (pointNext.x - pointPrev.x))) : pos.y
-                            ];
+                                pointOnLine[1] = (pointNext.x !== pointPrev.x) ? pointPrev.y + ((pointNext.y - pointPrev.y) * ((pos.x - pointPrev.x) / (pointNext.x - pointPrev.x))) : pointNext.y;
+                            } else if (that.tooltipOptions.verticalLines === "left") {
+                                // Calculate the point on the line vertically closest to our cursor.  If vertical line, just use the current y position
+                                pointOnLine[1] = (pointNext.x !== pointPrev.x) ? pointPrev.y + ((pointNext.y - pointPrev.y) * ((pos.x - pointPrev.x) / (pointNext.x - pointPrev.x))) : pointPrev.y;
+                            } else {
+                                // Calculate the point on the line vertically closest to our cursor.  If vertical line, just use the current y position
+                                pointOnLine[1] = (pointNext.x !== pointPrev.x) ? pointPrev.y + ((pointNext.y - pointPrev.y) * ((pos.x - pointPrev.x) / (pointNext.x - pointPrev.x))) : pos.y;
+                            }
 
                             var item = {
                                 datapoint: pointOnLine,
@@ -272,7 +281,6 @@
                                     pageY: series.yaxis.p2c(pointOnLine[1])
                                 };
                             }
-                            //break;
                         }
                     }
                 });
@@ -400,12 +408,18 @@
         var yLabelPattern = /%ly/; // requires flot-axislabels plugin https://github.com/markrcote/flot-axislabels, will be ignored if plugin isn't loaded
         var xPattern = /%x\.{0,1}(\d{0,})/;
         var yPattern = /%y\.{0,1}(\d{0,})/;
+        var xlPattern = /%X\.{0,1}(\d{0,})/;  // x line value pattern
+        var ylPattern = /%Y\.{0,1}(\d{0,})/;  // y line value pattern
         var xPatternWithoutPrecision = "%x";
         var yPatternWithoutPrecision = "%y";
+        var xlPatternWithoutPrecision = "%X";
+        var ylPatternWithoutPrecision = "%Y";
         var customTextPattern = "%ct";
         var nPiePattern = "%n";
 
         var x, y, customText, p, n;
+        var xl = item.datapoint[0];
+        var yl = item.datapoint[1];
 
         // for threshold plugin we need to read data from different place
         if (typeof item.series.threshold !== "undefined") {
@@ -423,6 +437,7 @@
         else if (typeof item.series.lines !== "undefined" && item.series.lines.steps) {
             x = item.series.datapoints.points[item.dataIndex * 2];
             y = item.series.datapoints.points[item.dataIndex * 2 + 1];
+
             // TODO: where to find custom text in this variant?
             customText = "";
         } else {
@@ -509,17 +524,21 @@
         // time mode axes with custom dateFormat
         if (this.isTimeMode('xaxis', item) && this.isXDateFormat(item)) {
             content = content.replace(xPattern, this.timestampToDate(x, this.tooltipOptions.xDateFormat, item.series.xaxis.options));
+            content = content.replace(xlPattern, this.timestampToDate(xl, this.tooltipOptions.xDateFormat, item.series.xaxis.options));
         }
         if (this.isTimeMode('yaxis', item) && this.isYDateFormat(item)) {
             content = content.replace(yPattern, this.timestampToDate(y, this.tooltipOptions.yDateFormat, item.series.yaxis.options));
+            content = content.replace(ylPattern, this.timestampToDate(yl, this.tooltipOptions.yDateFormat, item.series.yaxis.options));
         }
 
         // set precision if defined
         if (typeof x === 'number') {
             content = this.adjustValPrecision(xPattern, content, x);
+            content = this.adjustValPrecision(xlPattern, content, xl);
         }
         if (typeof y === 'number') {
             content = this.adjustValPrecision(yPattern, content, y);
+            content = this.adjustValPrecision(ylPattern, content, yl);
         }
 
         // change x from number to given label, if given
@@ -562,10 +581,12 @@
         if (typeof item.series.xaxis.tickFormatter !== 'undefined') {
             //escape dollar
             content = content.replace(xPatternWithoutPrecision, item.series.xaxis.tickFormatter(x, item.series.xaxis).replace(/\$/g, '$$'));
+            content = content.replace(xlPatternWithoutPrecision, item.series.xaxis.tickFormatter(xl, item.series.xaxis).replace(/\$/g, '$$'));
         }
         if (typeof item.series.yaxis.tickFormatter !== 'undefined') {
             //escape dollar
             content = content.replace(yPatternWithoutPrecision, item.series.yaxis.tickFormatter(y, item.series.yaxis).replace(/\$/g, '$$'));
+            content = content.replace(ylPatternWithoutPrecision, item.series.yaxis.tickFormatter(yl, item.series.yaxis).replace(/\$/g, '$$'));
         }
 
         return content;
