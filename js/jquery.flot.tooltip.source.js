@@ -633,7 +633,7 @@
         init: init,
         options: defaultOptions,
         name: 'tooltip',
-        version: '0.8.6'
+        version: '0.9.1'
     });
 
 })(jQuery);
